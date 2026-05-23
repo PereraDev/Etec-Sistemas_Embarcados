@@ -105,21 +105,17 @@
       align-items: center;
       gap: 12px;
       border: 1px solid #2d3148;
+      transition: border-color 0.3s;
     }
 
-    .device-icon {
-      font-size: 24px;
+    .device.active {
+      border-color: #22c55e;
     }
 
-    .device-name {
-      font-size: 13px;
-      color: #94a3b8;
-    }
-
-    .device-status {
-      font-size: 14px;
-      font-weight: 600;
-    }
+    .device-icon { font-size: 24px; }
+    .device-name { font-size: 13px; color: #94a3b8; }
+    .device-status { font-size: 14px; font-weight: 600; }
+    .device-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
 
     .on  { color: #22c55e; }
     .off { color: #475569; }
@@ -190,25 +186,26 @@
 </div>
 
 <div class="devices">
-  <div class="device">
+  <div class="device" id="deviceFan">
     <span class="device-icon">🌀</span>
     <div>
       <div class="device-name">Fan</div>
       <div class="device-status off" id="fanStatus">OFF</div>
     </div>
   </div>
-  <div class="device">
+  <div class="device" id="deviceRele">
     <span class="device-icon">⚡</span>
     <div>
       <div class="device-name">Relé</div>
       <div class="device-status off" id="releStatus">OFF</div>
     </div>
   </div>
-  <div class="device">
+  <div class="device" id="deviceBuzzer">
     <span class="device-icon">🔊</span>
     <div>
       <div class="device-name">Buzzer</div>
       <div class="device-status off" id="buzzerStatus">OFF</div>
+      <div class="device-sub" id="bipContador">Bips: 0</div>
     </div>
   </div>
 </div>
@@ -221,12 +218,15 @@
 </div>
 
 <script>
-  // ============================================
-  // CONFIGURAÇÃO — troca pela URL do seu Render
-  // ============================================
-  const BROKER_URL = 'ws://SEU-APP.onrender.com:9001';
+  const BROKER_URL  = 'wss://9bd1abc1892845f1b0efcc088ae7552d.s1.eu.hivemq.cloud:8884/mqtt';
+  const BROKER_USER = 'esp32';
+  const BROKER_PASS = 'Energia1234';
 
-  const client = mqtt.connect(BROKER_URL);
+  const client = mqtt.connect(BROKER_URL, {
+    username: BROKER_USER,
+    password: BROKER_PASS,
+    rejectUnauthorized: false
+  });
 
   function addLog(msg) {
     const li = document.createElement('li');
@@ -237,22 +237,36 @@
     if (list.children.length > 50) list.removeChild(list.lastChild);
   }
 
+  function setDevice(statusEl, cardEl, valor) {
+    statusEl.textContent = valor;
+    statusEl.className = 'device-status ' + (valor === 'ON' ? 'on' : 'off');
+    if (valor === 'ON') {
+      cardEl.classList.add('active');
+    } else {
+      cardEl.classList.remove('active');
+    }
+  }
+
   client.on('connect', () => {
     document.getElementById('connBadge').textContent = '🟢 Conectado ao broker';
-
     client.subscribe('energia/carga');
     client.subscribe('energia/temperatura');
     client.subscribe('energia/status');
     client.subscribe('energia/fan');
     client.subscribe('energia/rele');
     client.subscribe('energia/buzzer');
-
+    client.subscribe('energia/bips');
     addLog('Conectado ao broker MQTT');
   });
 
   client.on('error', (err) => {
     document.getElementById('connBadge').textContent = '🔴 Erro de conexão';
     addLog('Erro: ' + err.message);
+  });
+
+  client.on('close', () => {
+    document.getElementById('connBadge').textContent = '🔴 Desconectado';
+    addLog('Conexão encerrada');
   });
 
   client.on('message', (topic, message) => {
@@ -269,9 +283,7 @@
     if (topic === 'energia/status') {
       const dot  = document.getElementById('statusDot');
       const text = document.getElementById('statusText');
-
       dot.className = 'status-dot';
-
       if (valor === 'NORMAL') {
         dot.classList.add('dot-normal');
         text.textContent = '✅ Sistema Normal';
@@ -285,26 +297,36 @@
         dot.classList.add('dot-perigo');
         text.textContent = '🛡️ PROTEÇÃO ATIVADA — Sistema OFF';
       }
-
       addLog('Status: ' + valor);
     }
 
     if (topic === 'energia/fan') {
-      const el = document.getElementById('fanStatus');
-      el.textContent = valor;
-      el.className = 'device-status ' + (valor === 'ON' ? 'on' : 'off');
+      setDevice(
+        document.getElementById('fanStatus'),
+        document.getElementById('deviceFan'),
+        valor
+      );
     }
 
     if (topic === 'energia/rele') {
-      const el = document.getElementById('releStatus');
-      el.textContent = valor;
-      el.className = 'device-status ' + (valor === 'ON' ? 'on' : 'off');
+      setDevice(
+        document.getElementById('releStatus'),
+        document.getElementById('deviceRele'),
+        valor
+      );
     }
 
     if (topic === 'energia/buzzer') {
-      const el = document.getElementById('buzzerStatus');
-      el.textContent = valor;
-      el.className = 'device-status ' + (valor === 'ON' ? 'on' : 'off');
+      setDevice(
+        document.getElementById('buzzerStatus'),
+        document.getElementById('deviceBuzzer'),
+        valor
+      );
+      if (valor === 'ON') addLog('Buzzer ativado');
+    }
+
+    if (topic === 'energia/bips') {
+      document.getElementById('bipContador').textContent = 'Bips: ' + valor;
     }
   });
 </script>
